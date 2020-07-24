@@ -128,13 +128,11 @@ impl MySqlBicycleRepo {
     fn get_in_tx(&self, tx: &mut Transaction, id: i64) -> RepositoryResult<CoreBicycle> {
         let query = tx.prep(GET_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         tx.exec_map(&query, (id, ), MySqlBicycleRepo::sql_bicycle_mapper())
-            .map_err(|err| RepositoryError::StorageError(err.to_string()))
+            .map_err(MySqlBicycleRepo::mysql_error_mapper)
             .map(|bikes| {
-                if bikes.len() == 0 {
-                    Err(RepositoryError::IdDoesntExist)
-                } else {
-                    Ok(bikes[0].bike.clone())
-                }
+                bikes.into_iter().next()
+                    .map(|bike| bike.bike)
+                    .ok_or(RepositoryError::IdDoesntExist)
             })
             .and_then(convert::identity)
     }
@@ -145,13 +143,11 @@ impl Repository for MySqlBicycleRepo {
         let mut conn = self.get_connection()?;
         let query = conn.prep(GET_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         conn.exec_map(&query, (id, ), MySqlBicycleRepo::sql_bicycle_mapper())
-            .map_err(|err| RepositoryError::StorageError(err.to_string()))
+            .map_err(MySqlBicycleRepo::mysql_error_mapper)
             .map(|bikes| {
-                if bikes.len() == 0 {
-                    Err(RepositoryError::IdDoesntExist)
-                } else {
-                    Ok(bikes[0].bike.clone())
-                }
+                bikes.into_iter().next()
+                    .map(|bike| bike.bike)
+                    .ok_or(RepositoryError::IdDoesntExist)
             })
             .and_then(convert::identity)
     }
@@ -169,16 +165,18 @@ impl Repository for MySqlBicycleRepo {
     }
 
     fn save<F>(&self, oid: Option<i64>, f: F) -> RepositoryResult<CoreBicycle>
-        where F: FnOnce(Option<CoreBicycle>) -> CoreBicycle {
+        where F: FnOnce(Option<CoreBicycle>) -> Option<CoreBicycle> {
         let mut conn = self.get_connection()?;
         let mut tx = self.start_tx(&mut conn)?;
         return if let Some(id) = oid {
             self.get_for_update(&mut tx, id)
-                .map(|bike| f(Some(bike.bike.clone())))
+                .map(|bike| f(Some(bike.bike.clone())).ok_or(RepositoryError::OperationCancelled))
+                .and_then(convert::identity)
                 .and_then(|bike| self.update_in_tx(tx, &bike))
         } else {
-            let bike_to_insert = f(None);
-            self.insert_in_tx(tx, &bike_to_insert)
+            f(None)
+                .ok_or(RepositoryError::OperationCancelled)
+                .and_then(|bike| self.insert_in_tx(tx, &bike))
         };
     }
 
