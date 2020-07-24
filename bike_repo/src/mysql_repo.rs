@@ -34,9 +34,12 @@ impl MySqlBicycleRepo {
         let conn_pool = r2d2::Pool::builder()
             .min_idle(Some(2))
             .max_size(4)
-            .build(manager)
-            .unwrap();
-        let pool = Arc::new(conn_pool);
+            .build(manager);
+        match &conn_pool {
+            Ok(_) => println!("Connected successfully to the DB"),
+            Err(e) => println!("Error connecting to DB: {}", e.to_string())
+        }
+        let pool = Arc::new(conn_pool.unwrap());
         MySqlBicycleRepo {
             pool
         }
@@ -95,7 +98,10 @@ impl MySqlBicycleRepo {
             .map(|()| tx.last_insert_id())
             .map(|oid| {
                 match oid {
-                    Some(id) => self.get(id as i64),
+                    Some(id) => {
+                        println!("last insert id: {}", id);
+                        self.get_in_tx(&mut tx, id as i64)
+                    }
                     None => Err(RepositoryError::IdDoesntExist)
                 }
             })
@@ -117,6 +123,20 @@ impl MySqlBicycleRepo {
                 tx.commit().map_err(MySqlBicycleRepo::mysql_error_mapper)?;
                 self.get(bike.id)
             })
+    }
+
+    fn get_in_tx(&self, tx: &mut Transaction, id: i64) -> RepositoryResult<CoreBicycle> {
+        let query = tx.prep(GET_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
+        tx.exec_map(&query, (id, ), MySqlBicycleRepo::sql_bicycle_mapper())
+            .map_err(|err| RepositoryError::StorageError(err.to_string()))
+            .map(|bikes| {
+                if bikes.len() == 0 {
+                    Err(RepositoryError::IdDoesntExist)
+                } else {
+                    Ok(bikes[0].bike.clone())
+                }
+            })
+            .and_then(convert::identity)
     }
 }
 

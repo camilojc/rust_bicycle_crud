@@ -32,6 +32,7 @@ pub trait Repository {
     fn get_all(&self, page: i64, limit: i64) -> RepositoryResult<Vec<Bicycle>>;
 }
 
+#[derive(Debug)]
 pub enum RepositoryError {
     ConnectionError(String),
     NotFound,
