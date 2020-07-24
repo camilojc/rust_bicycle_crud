@@ -1,0 +1,15 @@
+[package]
+name = "bike_repo"
+version = "0.1.0"
+authors = ["camilojc <camilo@jcoder.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+bike_core = { path = "../bike_core" }
+
+r2d2 = "0.8.9"
+r2d2_mysql = "18.0.0"
+mysql = "18.2.0"

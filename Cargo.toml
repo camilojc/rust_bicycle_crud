@@ -1,0 +1,14 @@
+[package]
+name = "bicycle_crud"
+version = "0.1.0"
+authors = ["camilojc <camilo@jcoder.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bike_core = { path = "./bike_core" }
+
+bike_http = { path = "./bike_http" }
+bike_repo = { path = "./bike_repo" }
+
