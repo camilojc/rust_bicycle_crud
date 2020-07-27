@@ -19,15 +19,12 @@ pub struct Bicycle {
 
 pub type RepositoryResult<T> = core::result::Result<T, RepositoryError>;
 
-pub trait Repository {
+pub trait Repository: Send + Sync {
     fn get(&self, id: i64) -> RepositoryResult<Bicycle>;
 
     fn insert(&self, bike: &Bicycle) -> RepositoryResult<Bicycle>;
 
     fn update(&self, bike: &Bicycle) -> RepositoryResult<Bicycle>;
-
-    fn save<F>(&self, id: Option<i64>, f: F) -> RepositoryResult<Bicycle>
-        where F: FnOnce(Option<Bicycle>) -> Option<Bicycle>;
 
     fn get_all(&self, page: i64, limit: i64) -> RepositoryResult<Vec<Bicycle>>;
 }

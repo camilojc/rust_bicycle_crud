@@ -80,60 +80,48 @@ impl MySqlBicycleRepo {
         let query = tx.prep(GET_FOR_UPDATE).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         tx.exec_map(&query, (id, ), MySqlBicycleRepo::sql_bicycle_mapper())
             .map_err(|err| RepositoryError::StorageError(err.to_string()))
-            .map(|bikes| {
-                if bikes.len() == 0 {
-                    Err(RepositoryError::IdDoesntExist)
-                } else {
-                    Ok(bikes[0].clone())
-                }
-            })
+            .map(|bikes| MySqlBicycleRepo::get_first_bike(bikes))
             .and_then(convert::identity)
     }
 
+    fn get_first_bike(bikes: Vec<Bicycle>) -> RepositoryResult<Bicycle> {
+        bikes.into_iter().next()
+            .ok_or(RepositoryError::IdDoesntExist)
+    }
+
     fn insert_in_tx(&self, mut tx: Transaction, bike: &CoreBicycle) -> RepositoryResult<CoreBicycle> {
-        let query = tx.prep(INSERT_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
+        let insert_query = tx.prep(INSERT_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-        tx.exec_drop(&query, (&bike.model, bike.color.to_string(), now, now))
+        tx.exec_drop(&insert_query, (&bike.model, bike.color.to_string(), now, now))
             .map_err(MySqlBicycleRepo::mysql_error_mapper)
             .map(|()| tx.last_insert_id())
-            .map(|oid| {
-                match oid {
-                    Some(id) => {
-                        println!("last insert id: {}", id);
-                        self.get_in_tx(&mut tx, id as i64)
-                    }
-                    None => Err(RepositoryError::IdDoesntExist)
-                }
-            })
-            .and_then(|val| {
+            .map(|oid| oid.ok_or(RepositoryError::IdDoesntExist))
+            .and_then(convert::identity)
+            .map(|id| self.get_in_tx(&mut tx, id as i64))
+            .and_then(|result| {
                 tx.commit().map_err(MySqlBicycleRepo::mysql_error_mapper)?;
-                val
+                result
             })
     }
 
     fn update_in_tx(&self, mut tx: Transaction, bike: &CoreBicycle) -> Result<CoreBicycle, RepositoryError> {
-        let query = tx.prep(UPDATE_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
+        let update_query = tx.prep(UPDATE_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
         self.get_for_update(&mut tx, bike.id)
-            .and_then(|b| {
-                tx.exec_drop(query, (&bike.model, bike.color.to_string(), now, b.version + 1, bike.id))
+            .map(|stored_bike|
+                tx.exec_drop(update_query, (&bike.model, bike.color.to_string(), now, stored_bike.version + 1, bike.id))
                     .map_err(MySqlBicycleRepo::mysql_error_mapper)
-            })
-            .and_then(|()| {
-                tx.commit().map_err(MySqlBicycleRepo::mysql_error_mapper)?;
-                self.get(bike.id)
-            })
+            )
+            .and_then(convert::identity)
+            .and_then(|()| tx.commit().map_err(MySqlBicycleRepo::mysql_error_mapper))
+            .and_then(|()| self.get(bike.id))
     }
 
     fn get_in_tx(&self, tx: &mut Transaction, id: i64) -> RepositoryResult<CoreBicycle> {
         let query = tx.prep(GET_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         tx.exec_map(&query, (id, ), MySqlBicycleRepo::sql_bicycle_mapper())
             .map_err(MySqlBicycleRepo::mysql_error_mapper)
-            .map(|bikes| {
-                bikes.into_iter().next()
-                    .map(|bike| bike.bike)
-                    .ok_or(RepositoryError::IdDoesntExist)
-            })
+            .map(|bikes| MySqlBicycleRepo::get_first_bike(bikes).map(|bike| bike.bike))
             .and_then(convert::identity)
     }
 }
@@ -144,11 +132,7 @@ impl Repository for MySqlBicycleRepo {
         let query = conn.prep(GET_QUERY).map_err(MySqlBicycleRepo::mysql_error_mapper)?;
         conn.exec_map(&query, (id, ), MySqlBicycleRepo::sql_bicycle_mapper())
             .map_err(MySqlBicycleRepo::mysql_error_mapper)
-            .map(|bikes| {
-                bikes.into_iter().next()
-                    .map(|bike| bike.bike)
-                    .ok_or(RepositoryError::IdDoesntExist)
-            })
+            .map(|bikes| MySqlBicycleRepo::get_first_bike(bikes).map(|bike| bike.bike))
             .and_then(convert::identity)
     }
 
@@ -162,22 +146,6 @@ impl Repository for MySqlBicycleRepo {
         let mut conn = self.get_connection()?;
         let tx = self.start_tx(&mut conn)?;
         self.update_in_tx(tx, bike)
-    }
-
-    fn save<F>(&self, oid: Option<i64>, f: F) -> RepositoryResult<CoreBicycle>
-        where F: FnOnce(Option<CoreBicycle>) -> Option<CoreBicycle> {
-        let mut conn = self.get_connection()?;
-        let mut tx = self.start_tx(&mut conn)?;
-        return if let Some(id) = oid {
-            self.get_for_update(&mut tx, id)
-                .map(|bike| f(Some(bike.bike.clone())).ok_or(RepositoryError::OperationCancelled))
-                .and_then(convert::identity)
-                .and_then(|bike| self.update_in_tx(tx, &bike))
-        } else {
-            f(None)
-                .ok_or(RepositoryError::OperationCancelled)
-                .and_then(|bike| self.insert_in_tx(tx, &bike))
-        };
     }
 
     fn get_all(&self, page: i64, limit: i64) -> RepositoryResult<Vec<CoreBicycle>> {
