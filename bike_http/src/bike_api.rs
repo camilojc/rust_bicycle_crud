@@ -3,11 +3,11 @@ use std::sync::Arc;
 use bike_core::{Bicycle, Repository, RepositoryResult};
 
 pub struct BicycleApi {
-    repo: Arc<Box<dyn Repository>>
+    repo: Arc<dyn Repository>,
 }
 
 impl BicycleApi {
-    pub fn new(repo: Arc<Box<dyn Repository>>) -> BicycleApi {
+    pub fn new(repo: Arc<dyn Repository>) -> BicycleApi {
         BicycleApi {
             repo
         }

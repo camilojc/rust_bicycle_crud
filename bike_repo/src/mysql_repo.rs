@@ -85,7 +85,8 @@ impl MySqlBicycleRepo {
     }
 
     fn get_first_bike(bikes: Vec<Bicycle>) -> RepositoryResult<Bicycle> {
-        bikes.into_iter().next()
+        bikes.into_iter()
+            .next()
             .ok_or(RepositoryError::IdDoesntExist)
     }
 

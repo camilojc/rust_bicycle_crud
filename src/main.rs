@@ -5,7 +5,8 @@ use bike_repo::mysql_repo::MySqlBicycleRepo;
 
 fn main() {
     let repo = MySqlBicycleRepo::new();
-    let repo_shared: Arc<Box<dyn Repository>> = Arc::new(Box::new(repo));
+    let repo_shared: Arc<dyn Repository> = Arc::new(repo);
 
     bike_http::initialize(&repo_shared);
+    // grpc::initialize(&repo_shared);
 }

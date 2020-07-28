@@ -52,7 +52,7 @@ fn update_bike(id: i64, json_bike: Json<BicycleDto>, api: State<BicycleApi>) -> 
         .ok()
 }
 
-pub fn initialize(repo: &Arc<Box<dyn Repository>>) {
+pub fn initialize(repo: &Arc<dyn Repository>) {
     let api = BicycleApi::new(repo.clone());
 
     let config = Config::build(Environment::Staging)
